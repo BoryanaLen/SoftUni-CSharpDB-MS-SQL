@@ -1,0 +1,437 @@
+---------------------------------------------------------------------------------
+Section 1. DDL (30 pts)
+---------------------------------------------------------------------------------
+
+CREATE TABLE Cities(
+Id INT PRIMARY KEY IDENTITY,
+Name NVARCHAR(20) NOT NULL,
+CountryCode CHAR(2) NOT NULL
+)
+
+CREATE TABLE  Hotels(
+Id INT PRIMARY KEY IDENTITY,
+Name NVARCHAR(30) NOT NULL,
+CityId INT FOREIGN KEY REFERENCES Cities(Id) NOT NULL,
+EmployeeCount INT NOT NULL,
+BaseRate DECIMAL (18, 2)
+)
+
+CREATE TABLE Rooms(
+Id INT PRIMARY KEY IDENTITY,
+Price DECIMAL (18, 2) NOT NULL,
+Type NVARCHAR(20) NOT NULL,
+Beds INT NOT NULL,
+HotelId INT FOREIGN KEY REFERENCES Hotels(Id) NOT NULL,
+)
+
+CREATE TABLE Trips(
+Id INT PRIMARY KEY IDENTITY,
+RoomId INT FOREIGN KEY REFERENCES Rooms(Id) NOT NULL,
+BookDate DATE  NOT NULL,
+ArrivalDate DATE  NOT NULL,
+ReturnDate DATE NOT NULL,
+CancelDate DATE 
+)
+
+ALTER TABLE Trips
+ADD  CONSTRAINT chk_BookDate  
+CHECK(BookDate < ArrivalDate)
+
+ALTER TABLE Trips
+ADD  CONSTRAINT ArrivalDate 
+CHECK(ArrivalDate < ReturnDate)
+
+
+CREATE TABLE Accounts(
+Id INT PRIMARY KEY IDENTITY,
+FirstName NVARCHAR(50) NOT NULL,
+MiddleName NVARCHAR(20),
+LastName NVARCHAR(50) NOT NULL,
+CityId INT FOREIGN KEY REFERENCES Cities(Id) NOT NULL,
+BirthDate DATE NOT NULL,
+Email VARCHAR(100) UNIQUE NOT NULL
+)
+
+CREATE TABLE AccountsTrips(
+AccountId INT FOREIGN KEY REFERENCES Accounts(Id) NOT NULL,
+TripId INT FOREIGN KEY REFERENCES Trips(Id) NOT NULL,
+Luggage INT CHECK(Luggage >= 0) NOT NULL
+PRIMARY KEY (AccountId, TripId)
+)
+
+---------------------------------------------------------------------------------
+02. Insert
+---------------------------------------------------------------------------------
+
+INSERT INTO Accounts
+VALUES('John', 'Smith',	'Smith', 34, '1975-07-21', 'j_smith@gmail.com'),
+('Gosho', NULL,	'Petrov',11, '1978-05-16',	'g_petrov@gmail.com'),
+('Ivan', 'Petrovich', 'Pavlov',	59,	'1849-09-26', 'i_pavlov@softuni.bg'),
+('Friedrich', 'Wilhelm', 'Nietzsche', 2, '1844-10-15', 'f_nietzsche@softuni.bg')
+
+INSERT INTO Trips
+VALUES(101,	'2015-04-12', '2015-04-14',	'2015-04-20', '2015-02-02'),
+(102, '2015-07-07',	'2015-07-15', '2015-07-22',	'2015-04-29'),
+(103, '2013-07-17',	'2013-07-23', '2013-07-24',	NULL),
+(104 , '2012-03-17', '2012-03-31', '2012-04-01', '2012-01-10'),
+(109, '2017-08-07',	'2017-08-28', '2017-08-29',	NULL)
+
+---------------------------------------------------------------------------------
+03. Update
+---------------------------------------------------------------------------------
+
+UPDATE Rooms
+SET Price = Price * 1.14
+WHERE HotelId IN (5, 7, 9)
+
+---------------------------------------------------------------------------------
+04. Delete
+---------------------------------------------------------------------------------
+
+DELETE FROM AccountsTrips
+WHERE AccountId = 47
+
+---------------------------------------------------------------------------------
+05. Bulgarian Cities
+---------------------------------------------------------------------------------
+
+SELECT Id, Name FROM Cities
+WHERE CountryCode = 'BG'
+ORDER BY Name
+
+---------------------------------------------------------------------------------
+06. People Born After 1991
+---------------------------------------------------------------------------------
+
+SELECT 
+FirstName + ' ' + ISNULL(MiddleName + ' ', '') + LastName AS [Full Name],
+YEAR(BirthDate) AS BirthYear
+FROM Accounts
+WHERE YEAR(BirthDate) > 1991
+ORDER BY BirthYear DESC, FirstName
+
+---------------------------------------------------------------------------------
+07. EEE-Mails
+---------------------------------------------------------------------------------
+
+SELECT 
+FirstName,
+LastName,
+CONVERT(VARCHAR(15), BirthDate, 110) AS BirthDate,
+c.Name AS Hometown,
+Email
+FROM Accounts a
+JOIN Cities AS c ON c.Id = a.CityId
+WHERE Email LIKE 'e%'
+ORDER BY Hometown DESC
+
+---------------------------------------------------------------------------------
+08. City Statistics
+---------------------------------------------------------------------------------
+
+SELECT 
+c.Name AS City,
+ISNULL(t.Hotels, 0) AS Hotels
+FROM Cities c
+LEFT JOIN (SELECT CityId,
+		COUNT(*) AS Hotels
+		FROM Hotels
+		GROUP BY CityId) t ON t.CityId = c.Id
+ORDER BY Hotels DESC, City
+
+---------------------------------------------------------------------------------
+09. Expensive First Class Rooms
+---------------------------------------------------------------------------------
+
+SELECT r.Id,
+r.Price,
+h.Name AS Hotel,
+c.Name AS City
+FROM Rooms r
+JOIN Hotels AS h ON h.Id = r.HotelId
+JOIN Cities AS c ON c.Id = h.CityId
+WHERE Type = 'First Class '
+ORDER BY Price DESC, r.Id
+
+---------------------------------------------------------------------------------
+10. Longest and Shortest Trips
+---------------------------------------------------------------------------------
+
+SELECT 
+a.Id AS AccountId,
+a.FirstName + ' ' + a.LastName AS FullName,
+tr.LongestTrip,
+tr.ShortestTrip
+FROM Accounts a
+JOIN (SELECT 
+		days.AccountId,
+		MAX(days) AS LongestTrip,
+		MIN(days) AS ShortestTrip
+		FROM (SELECT 
+				at.AccountId,
+				at.TripId,
+				DATEDIFF(DAY, t.ArrivalDate, t.ReturnDate) AS Days
+				FROM AccountsTrips at
+				JOIN Trips AS t ON t.Id = at.TripId
+				WHERE CancelDate IS NULL) days
+		GROUP BY days.AccountId) AS tr on tr.AccountId = a.Id
+WHERE MiddleName IS NULL
+ORDER BY LongestTrip DESC, a.Id
+
+
+---------------------------------------------------------------------------------
+11. Metropolis
+---------------------------------------------------------------------------------
+
+SELECT TOP 5
+t.CityId AS Id,
+c.Name AS City,
+c.CountryCode AS Country,
+t.Accounts
+FROM (SELECT CityId,
+		COUNT(*) AS Accounts
+		FROM Accounts
+		GROUP BY CityId) t
+JOIN Cities AS c ON c.Id = t.CityId
+ORDER BY t.Accounts DESC
+
+---------------------------------------------------------------------------------
+12. Romantic Getaways
+---------------------------------------------------------------------------------
+
+SELECT 
+tt.Id,
+tt.Email,
+tt.City,
+COUNT(*) AS Trips
+FROM (SELECT 
+		a.Id,
+		a.Email,
+		c.Name AS City
+		FROM Accounts a
+		JOIN AccountsTrips AS at ON at.AccountId = a.Id
+		JOIN Trips AS t ON t.Id = at.TripId
+		JOIN Rooms AS r ON r.Id = t.RoomId
+		JOIN Hotels AS h ON h.Id = r.HotelId
+		JOIN Cities AS c ON c.Id = h.CityId
+		WHERE a.CityId = c.Id) tt
+GROUP BY tt.Id, tt.Email, tt.City
+ORDER BY Trips DESC, tt.Id
+
+---------------------------------------------------------------------------------
+13. Lucrative Destinations
+---------------------------------------------------------------------------------
+
+SELECT TOP 10
+tt.CityId,
+tt.City,
+SUM(tt.BaseRate + tt.Price) AS [Total Revenue],
+COUNT(*) AS Trips
+FROM (SELECT c.Id AS CityId, h.BaseRate, r.Price, C.Name AS City
+		FROM Trips t
+		JOIN Rooms AS r ON r.Id = t.RoomId
+		JOIN Hotels AS h ON h.Id = r.HotelId
+		JOIN Cities AS c ON c.Id = h.CityId
+		WHERE YEAR(t.BookDate) = 2016) tt
+GROUP BY tt.CityId, tt.City
+ORDER BY [Total Revenue] DESC, Trips DESC
+
+---------------------------------------------------------------------------------
+14. Trip Revenues
+---------------------------------------------------------------------------------
+
+SELECT 
+tt.TripId AS Id,
+tt.HotelName,
+tt.RoomType,
+SUM(tt.Revenue) AS Revenue
+FROM (SELECT
+		at.TripId,
+		h.Name AS HotelName,
+		r.Type AS RoomType,
+		IIF(t.CancelDate IS NULL, (h.BaseRate + r.Price), 0) AS Revenue
+		FROM AccountsTrips at
+		JOIN Trips AS t ON t.Id = at.TripId
+		JOIN Rooms AS r ON r.Id = t.RoomId
+		JOIN Hotels AS h ON h.Id = r.HotelId
+		JOIN Cities AS c ON c.Id = h.CityId) tt
+GROUP BY tt.TripId, tt.HotelName, tt.RoomType
+ORDER BY tt.RoomType, tt.TripId
+
+---------------------------------------------------------------------------------
+15. Top Travelers
+---------------------------------------------------------------------------------
+
+SELECT 
+tt.AccountId,
+a.Email,
+tt.CountryCode,
+tt.Trips
+FROM (SELECT c.CountryCode,
+		at.AccountId,
+		COUNT(*) AS Trips,
+		ROW_NUMBER () OVER(PARTITION BY c.CountryCode ORDER BY COUNT(*) DESC) AS Rank 
+		FROM AccountsTrips at
+		JOIN Trips AS t ON t.Id = at.TripId
+		JOIN Rooms AS r ON r.Id = t.RoomId
+		JOIN Hotels AS h ON h.Id = r.HotelId
+		JOIN Cities AS c ON c.Id = h.CityId
+		GROUP BY c.CountryCode, at.AccountId) tt
+LEFT JOIN Accounts AS a ON a.Id = tt.AccountId
+WHERE tt.Rank = 1
+ORDER BY Trips DESC, tt.AccountId
+
+
+---------------------------------------------------------------------------------
+16. Luggage Fees
+---------------------------------------------------------------------------------
+
+SELECT 
+t.TripId,
+t.Luggage,
+IIF(t.Luggage > 5, CONCAT('$', t.Luggage * 5), '$0' ) AS Fee
+FROM (SELECT TripId,
+	SUM(Luggage) AS Luggage
+	FROM AccountsTrips
+	GROUP BY TripId
+	HAVING SUM(Luggage) > 0) t
+ORDER BY t.Luggage DESC
+
+---------------------------------------------------------------------------------
+17. GDPR Violation
+---------------------------------------------------------------------------------
+
+SELECT 
+at.TripId,
+a.FirstName + ' ' + ISNULL(a.MiddleName + ' ', '') + a.LastName AS [Full Name],
+c.Name AS [From],
+st.Name AS  [To],
+IIF(t.CancelDate IS NULL,CONCAT((DATEDIFF(DAY, t.ArrivalDate, t.ReturnDate)), ' days'), 'Canceled') AS Duration
+FROM AccountsTrips at
+JOIN Accounts AS a ON a.Id = at.AccountId
+JOIN Cities AS c ON c.Id = a.CityId
+JOIN Trips AS t ON t.Id = at.TripId
+JOIN Rooms AS r ON r.Id = t.RoomId
+JOIN Hotels AS h ON h.Id = r.HotelId
+JOIN Cities AS st ON st.Id = h.CityId
+ORDER BY [Full Name], TripId
+
+
+---------------------------------------------------------------------------------
+18. Available Room
+---------------------------------------------------------------------------------
+
+CREATE FUNCTION  udf_GetAvailableRoom(@HotelId INT, @Date DATE , @People INT)
+RETURNS VARCHAR(150)
+AS
+BEGIN
+
+DECLARE @roomNumber INT = (SELECT 
+			t.RoomId
+			FROM(SELECT TOP 1
+					r.Id AS RoomId,
+					r.Type,
+					r.Beds,
+					r.Price + h.BaseRate AS TotalPrice,
+					DENSE_RANK() OVER(PARTITION BY r.HotelId ORDER BY r.Price DESC) AS Rank 
+					FROM Rooms r
+					JOIN Hotels AS h ON h.Id = r.HotelId
+					WHERE HotelId = @HotelId AND r.Beds >= @People) t
+			WHERE t.Rank = 1)
+
+IF(@roomNumber IS NULL)
+	BEGIN
+	RETURN 'No rooms available'
+	END
+
+DECLARE @ArrivalDate DATE = (SELECT TOP 1 t.ArrivalDate
+			FROM Rooms r
+			JOIN Trips AS t ON t.RoomId = r.Id
+			WHERE t.Id = @roomNumber)
+
+DECLARE @ReturnDate DATE = (SELECT TOP 1
+			t.ReturnDate
+			FROM Rooms r
+			JOIN Trips AS t ON t.RoomId = r.Id
+			WHERE r.Id = @roomNumber)
+
+DECLARE @CancelDate DATE = (SELECT TOP 1
+			t.CancelDate
+			FROM Rooms r
+			JOIN Trips AS t ON t.RoomId = r.Id
+			WHERE r.Id = @roomNumber)
+
+IF((@Date BETWEEN @ArrivalDate AND @ReturnDate) AND @CancelDate IS NULL)
+		BEGIN
+		RETURN 'No rooms available'
+		END
+
+DECLARE @result VARCHAR(150) = (SELECT 
+			CONCAT('Room ', t.RoomId, ': ',t.Type, ' (' , t.Beds, ' beds) - $', t.TotalPrice * @People)
+			FROM(SELECT
+					r.Id AS RoomId,
+					r.Type,
+					r.Beds,
+					r.Price + h.BaseRate AS TotalPrice,
+					DENSE_RANK() OVER(PARTITION BY r.HotelId ORDER BY r.Price DESC) AS Rank 
+					FROM Rooms r
+					JOIN Hotels AS h ON h.Id = r.HotelId
+					WHERE HotelId = @HotelId AND r.Beds >= @People) t
+			WHERE t.Rank = 1)
+
+RETURN @result
+END
+
+---------------------------------------------------------------------------------
+19. Switch Room
+---------------------------------------------------------------------------------
+
+CREATE PROC usp_SwitchRoom(@TripId INT, @TargetRoomId INT)
+AS
+BEGIN
+
+DECLARE @TargetRoomHotelId INT = (SELECT r.HotelId FROM Rooms r WHERE r.Id = @TargetRoomId)
+
+IF(@TargetRoomHotelId NOT IN (SELECT h.Id AS HotelId
+				FROM Trips t
+				JOIN Rooms AS r ON r.Id = t.RoomId
+				JOIN Hotels AS h ON h.Id = r.HotelId
+				WHERE t.Id = @TripId))
+ BEGIN
+   RAISERROR('Target room is in another hotel!', 16, 1)
+   RETURN
+ END
+
+DECLARE @TargetRoomBeds INT = (SELECT Beds FROM Rooms WHERE Id = @TargetRoomId)
+DECLARE @TripsAccounts INT = (SELECT COUNT(*) FROM AccountsTrips GROUP BY TripId HAVING TripId = @TripId)
+
+IF(@TargetRoomBeds < @TripsAccounts)
+   BEGIN
+    RAISERROR('Not enough beds in target room!', 16, 1)
+    RETURN
+   END
+
+UPDATE Trips
+SET RoomId = @TargetRoomId
+WHERE Id = @TripId
+
+END
+
+---------------------------------------------------------------------------------
+20. Cancel Trip
+---------------------------------------------------------------------------------
+
+CREATE TRIGGER tr_DeletedTrips
+ON Trips
+INSTEAD OF DELETE
+  AS
+  BEGIN
+      UPDATE Trips
+      SET CancelDate = GETDATE()
+      WHERE Id IN (SELECT Id FROM deleted WHERE CancelDate IS NULL)
+  END
+
+
+
+
+

@@ -1,0 +1,307 @@
+---------------------------------------------------------------------------------
+Section 1. DDL (30 pts)
+---------------------------------------------------------------------------------
+
+CREATE TABLE Planes(
+Id INT PRIMARY KEY IDENTITY,
+[Name] VARCHAR(30) NOT NULL,
+Seats INT NOT NULL,
+[Range] INT NOT NULL
+)
+
+CREATE TABLE Flights(
+Id INT PRIMARY KEY IDENTITY,
+DepartureTime DATETIME,
+ArrivalTime DATETIME,
+Origin VARCHAR(50) NOT NULL,
+Destination VARCHAR(50) NOT NULL,
+PlaneId INT FOREIGN KEY REFERENCES Planes(Id) NOT NULL
+)
+
+CREATE TABLE Passengers(
+Id INT PRIMARY KEY IDENTITY,
+FirstName VARCHAR(30) NOT NULL,
+LastName VARCHAR(30) NOT NULL,
+Age INT NOT NULL,
+[Address] VARCHAR(30) NOT NULL,
+PassportId CHAR(11) NOT NULL
+)
+
+CREATE TABLE LuggageTypes(
+Id INT PRIMARY KEY IDENTITY,
+[Type] VARCHAR(30) NOT NULL,
+)
+
+CREATE TABLE Luggages(
+Id INT PRIMARY KEY IDENTITY,
+LuggageTypeId INT FOREIGN KEY REFERENCES LuggageTypes(Id) NOT NULL,
+PassengerId INT FOREIGN KEY REFERENCES Passengers(Id) NOT NULL
+)
+
+CREATE TABLE Tickets (
+Id INT PRIMARY KEY IDENTITY,
+PassengerId INT FOREIGN KEY REFERENCES Passengers(Id) NOT NULL,
+FlightId INT FOREIGN KEY REFERENCES Flights(Id) NOT NULL,
+LuggageId INT FOREIGN KEY REFERENCES Luggages(Id) NOT NULL,
+Price DECIMAL(18, 2)
+)
+
+---------------------------------------------------------------------------------
+02. Insert
+---------------------------------------------------------------------------------
+
+INSERT INTO Planes
+VALUES ('Airbus 336', 112,	5132),
+('Airbus 330', 432, 5325),
+('Boeing 369', 231,	2355),
+('Stelt 297', 254, 2143),
+('Boeing 338', 165,	5111),
+('Airbus 558', 387, 1342),
+('Boeing 128', 345,	5541)
+
+
+INSERT INTO LuggageTypes
+VALUES ('Crossbody Bag'),
+('School Backpack'),
+('Shoulder Bag')
+
+---------------------------------------------------------------------------------
+03. Update
+---------------------------------------------------------------------------------
+
+UPDATE Tickets
+SET Price = Price* 1.13
+WHERE FlightId = 41
+
+---------------------------------------------------------------------------------
+04. Delete
+---------------------------------------------------------------------------------
+
+DELETE FROM Tickets
+WHERE FlightId = 30
+
+DELETE FROM Flights
+WHERE Destination = 'Ayn Halagim'
+
+---------------------------------------------------------------------------------
+Section 3. Querying (40 pts)
+05. Trips
+---------------------------------------------------------------------------------
+
+SELECT Origin, Destination FROM Flights
+ORDER BY Origin, Destination
+
+---------------------------------------------------------------------------------
+06. The "Tr" Planes
+---------------------------------------------------------------------------------
+
+SELECT * FROM Planes
+WHERE [Name] LIKE '%tr%'
+ORDER BY Id, [Name], Seats, Range
+
+---------------------------------------------------------------------------------
+07. Flight Profits
+---------------------------------------------------------------------------------
+
+SELECT FlightId, SUM(Price) AS Price FROM Tickets
+GROUP BY FlightId
+ORDER BY Price DESC, FlightId
+
+---------------------------------------------------------------------------------
+08. Passanger and Prices
+---------------------------------------------------------------------------------
+
+SELECT TOP 10 FirstName,
+LastName,
+Tickets.Price
+FROM Passengers
+LEFT JOIN Tickets ON Tickets.PassengerId = Passengers.Id
+ORDER BY Price DESC, FirstName, LastName
+
+---------------------------------------------------------------------------------
+09. Top Luggages
+---------------------------------------------------------------------------------
+
+SELECT LuggageTypes.Type,
+ c.TotalCount AS MostUsedLuggage 
+FROM (SELECT LuggageTypeId,
+COUNT(PassengerId) AS TotalCount FROM Luggages
+GROUP BY LuggageTypeId) AS c
+LEFT JOIN LuggageTypes ON LuggageTypes.Id = C.LuggageTypeId
+ORDER BY MostUsedLuggage DESC, Type 
+
+---------------------------------------------------------------------------------
+10. Passanger Trips
+---------------------------------------------------------------------------------
+
+SELECT FirstName + ' ' + LastName AS [Full Name],
+Flights.Origin,
+Flights.Destination
+FROM Passengers
+JOIN Tickets ON Tickets.PassengerId = Passengers.Id
+JOIN Flights ON Flights.Id = Tickets.FlightId
+ORDER BY [Full Name], Origin, Destination
+
+---------------------------------------------------------------------------------
+11. Non Adventures People
+---------------------------------------------------------------------------------
+
+SELECT FirstName,
+LastName,
+Age
+FROM Passengers
+LEFT JOIN Tickets ON Tickets.PassengerId = Passengers.Id
+WHERE Tickets.Id IS NULL
+ORDER BY [Age] DESC, FirstName, LastName
+
+---------------------------------------------------------------------------------
+12. Lost Luggages
+---------------------------------------------------------------------------------
+
+SELECT
+PassportId,
+[Address]
+FROM Passengers
+LEFT JOIN Luggages ON Luggages.PassengerId = Passengers.Id
+WHERE Luggages.Id IS NULL
+ORDER BY PassportId, [Address]
+
+---------------------------------------------------------------------------------
+13. Count of Trips
+---------------------------------------------------------------------------------
+
+SELECT
+FirstName,
+LastName,
+ISNULL(t.TotalFlights, 0) AS [Total Trips]
+FROM Passengers
+LEFT JOIN (SELECT PassengerId,
+	COUNT(FlightId) AS TotalFlights
+	FROM Tickets
+	GROUP BY PassengerId) AS t ON t.PassengerId = Passengers.Id
+ORDER BY [Total Trips] DESC, FirstName, LastName
+
+---------------------------------------------------------------------------------
+14. Full Info
+---------------------------------------------------------------------------------
+
+SELECT t.[Full Name],
+t.[Plane Name],
+t.Trip,
+LuggageTypes.Type AS [Luggage Type]
+FROM (SELECT PassengerId,
+		FirstName + ' ' + LastName AS [Full Name],
+		FlightId,
+		LuggageId,
+		Flights.Origin + ' - ' + Flights.Destination AS Trip,
+		Origin,
+		Destination,
+		Planes.Name AS [Plane Name]
+		FROM Tickets
+		LEFT JOIN Passengers ON Passengers.Id = Tickets.PassengerId
+		LEFT JOIN Flights ON Flights.Id = Tickets.FlightId
+		LEFT JOIN Planes ON Planes.Id = Flights.PlaneId) AS t
+LEFT JOIN Luggages ON Luggages.Id = t.LuggageId
+LEFT JOIN LuggageTypes ON LuggageTypes.Id = Luggages.LuggageTypeId
+ORDER BY [Full Name], [Plane Name], Origin, Destination, [Luggage Type]
+
+
+---------------------------------------------------------------------------------
+15. Most Expesnive Trips
+---------------------------------------------------------------------------------
+
+SELECT t.FirstName,
+t.LastName,
+t.Destination,
+t.Price
+FROM (SELECT Passengers.FirstName,
+		Passengers.LastName,
+		Flights.Destination,
+		Tickets.Price,
+		DENSE_RANK() OVER (PARTITION BY Tickets.PassengerId ORDER BY (Tickets.Price) DESC) AS [rank] 
+		FROM Tickets
+		LEFT JOIN Passengers ON Passengers.Id = Tickets.PassengerId
+		LEFT JOIN Flights ON Flights.Id = Tickets.FlightId) AS t
+WHERE T.rank = 1
+ORDER BY Price DESC, FirstName, LastName, Destination
+
+
+
+---------------------------------------------------------------------------------
+16. Destinations Info
+---------------------------------------------------------------------------------
+
+SELECT Destination,
+ISNULL(T.FilesCount, 0)  AS FilesCount
+FROM Flights
+LEFT JOIN (SELECT FlightId,
+	COUNT(PassengerId) AS FilesCount
+	FROM Tickets
+	GROUP BY FlightId) AS t ON T.FlightId = Flights.Id
+ORDER BY FilesCount DESC, Destination
+
+---------------------------------------------------------------------------------
+17. PSP
+---------------------------------------------------------------------------------
+
+SELECT [Name], Seats, ISNULL(t.[Passengers Count], 0) AS [Passengers Count] FROM Planes
+LEFT JOIN (SELECT PlaneId,
+	COUNT(PlaneId) AS [Passengers Count]
+	FROM Tickets
+	LEFT JOIN Flights ON Flights.Id = Tickets.FlightId
+	GROUP BY PlaneId) AS t ON T.PlaneId = Planes.Id
+ORDER BY [Passengers Count] DESC, Name, Seats
+
+---------------------------------------------------------------------------------
+18. Vacation
+---------------------------------------------------------------------------------
+
+CREATE FUNCTION udf_CalculateTickets(@origin VARCHAR(50), @destination VARCHAR(50), @peopleCount INT) 
+RETURNS VARCHAR(50)
+AS
+BEGIN
+DECLARE @result VARCHAR(50), @count VARCHAR(10)
+SET @count = (SELECT Price FROM Flights
+			JOIN Tickets ON Tickets.FlightId = Flights.Id
+			WHERE Origin = @origin AND Destination = @destination)  * @peopleCount
+IF(@peopleCount > 0)
+	BEGIN 		
+		IF(@count IS NULL)
+		BEGIN
+		SET @result = 'Invalid flight!'
+		END
+		ELSE
+		SET @result = 'Total price ' + @count
+	END
+ELSE
+ SET @result = 'Invalid people count!'
+RETURN @result
+END
+
+
+---------------------------------------------------------------------------------
+19. Wrong Data
+---------------------------------------------------------------------------------
+
+CREATE PROC usp_CancelFlights
+AS
+UPDATE Flights
+SET ArrivalTime = NULL, DepartureTime = NULL
+WHERE ArrivalTime > DepartureTime
+
+
+---------------------------------------------------------------------------------
+20. Deleted Planes
+---------------------------------------------------------------------------------
+
+CREATE TRIGGER tr_planesAfterDelete
+   ON Planes
+   AFTER DELETE
+AS
+BEGIN
+   INSERT INTO DeletedPlanes
+   SELECT Id, [Name], Seats, [Range]
+   FROM deleted
+END
+
+
